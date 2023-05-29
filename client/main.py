@@ -1,41 +1,77 @@
+# pylint: disable=missing-docstring, invalid-name, redefined-outer-name
+
 import socket
-from datetime import datetime
-from dateutil.relativedelta import relativedelta
+import base64
+import os
 
-host:str = "127.0.0.1"
-port:int = 5555
-template:str = "in.txt"
+HOST = "localhost"
+PORT = 5555
+BUFFER = 1024
 
-def sendData(message:str, client:socket):
-    try:
-        client.sendall(message.encode())
-    except Exception as e:
-        print(e)
+C_RED = "\033[91m"
+C_GREEN = "\033[92m"
+C_BLUE = "\033[94m"
+C_ORANGE = "\033[93m"
+C_RESET = "\033[0m"
 
-def sendSMTP(message:str):
-    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client.connect((host,port))
-    sendData("helo localhost\r\n",client)
-    sendData("mail from: myself@radloff.gd\r\n",client)
-    sendData("rcpt to: gustav@radloff.gd\r\n",client)
-    sendData("data\r\n",client)
-    sendData("From: fake@fake.fake\r\n",client)
-    sendData("To: you@are@a@clown.clown.clown.clown\r\n",client)
-    sendData("Subject: Reminder\r\n",client)
-    sendData("Received: from bar.com by foo.com ; Thu, 21 May 1998 05:33:29 -0700 credit to the rfc for this one\r\n",client)
-    sendData("\r\n",client)
-    sendData(message,client)
-    sendData("\r\n",client)
-    sendData(".\r\n",client)
-    client.sendall("quit\r\n".encode())
-    client.close()
+# Email data
+SENDER = "bdayreminder@localhost"
+RECIPIENT = "forgetful@localhost"
+SUBJECT = "Message totally not from the Illuminati"
+IN_FILE = "in.txt"
 
+# Optional authentication
+USERNAME = base64.b64encode(SENDER.encode()).decode()
+PASSWORD = base64.b64encode("YourPassw0rd1H3re".encode()).decode()
+USERNAME = ""
+PASSWORD = ""
 
-def main():
-    toSend = ""
-    with open(template,'r') as fileHandle:
-        for line in fileHandle:
-            toSend = toSend + line
-    sendSMTP(toSend)
+def readInFile():
+    if not os.path.exists(IN_FILE):
+        print(f"{C_RED}{IN_FILE} not found{C_RESET}")
 
-main()
+    with open(IN_FILE, "r", encoding="utf-8") as f:
+        return f.read()
+
+def sendEmail(verbose=False):
+    body = readInFile()
+
+    msg = f"From: {SENDER}\r\nTo: {RECIPIENT}\r\nSubject: {SUBJECT}\r\n\r\n{body}\r\n"
+
+    endmsg = "\r\n.\r\n"
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
+        client.connect((HOST, PORT))
+
+        if verbose:
+            print(C_ORANGE + client.recv(1024).decode() + C_RESET, end="")
+
+        convo = [ "HELO BDay Reminder\r\n" ]
+
+        # Optional authentication
+        if USERNAME != "" and PASSWORD != "":
+            convo += [
+                "AUTH LOGIN\r\n",
+                (USERNAME + "\r\n"),
+                (PASSWORD + "\r\n")
+            ]
+
+        convo += [
+            f"MAIL FROM:<{SENDER}>\r\n",
+            f"RCPT TO:<{RECIPIENT}>\r\n",
+            "DATA\r\n",
+            (msg + endmsg),
+            "QUIT\r\n"
+        ]
+
+        # conv += f"Date {datetime.now()}\r\n"
+
+        # Manifest conversation
+        for x in convo:
+            client.send(x.encode())
+            if verbose:
+                print(x)
+                print(C_ORANGE + client.recv(1024).decode() + C_RESET, end="")
+
+if __name__ == "__main__":
+    sendEmail(False)
