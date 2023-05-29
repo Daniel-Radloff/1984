@@ -26,7 +26,7 @@ def sendSMTP(message:str):
     sendData("\r\n",client)
     sendData(message,client)
     sendData(".\r\n",client)
-    client.sendall("quit\n")
+    client.sendall("quit\n".encode())
     client.close()
 
 
