@@ -1,11 +1,20 @@
+# pylint: disable=missing-module-docstring, missing-function-docstring, invalid-name
 import socket
 import re
 
-PROXY_HOST = '127.0.0.1'
-PROXY_PORT = 5555
+C_RED = "\033[91m"
+C_GREEN = "\033[92m"
+C_BLUE = "\033[94m"
+C_ORANGE = "\033[93m"
+C_RESET = "\033[0m"
 
-FORWARD_HOST = '127.0.0.1'
+PROXY_HOST = ""
+PROXY_PORT = 5555
+BUFFER = 1024
+
+FORWARD_HOST = ""
 FORWARD_PORT = 5554
+
 FORBIDDEN = {
     "very good":"plusgood",
     "very fast":"plusfast",
@@ -19,12 +28,13 @@ FORBIDDEN = {
     "better":"gooder",
     "best":"goodest"}
 
-def filterForbiden(input:str):
+def filterForbiden(inp:str):
+    print("VERBODE:\n" + inp)
     modify = False
     new = ""
-    lines = input.split("\r\n")
+    lines = inp.split("\r\n")
     for line in lines:
-        if (line == ""):
+        if line == "":
             modify = True
         if modify:
             for key,value in FORBIDDEN.items():
@@ -33,45 +43,59 @@ def filterForbiden(input:str):
         new = new + line + "\r\n"
     return new
             
+def connectSocket(ip, port):
+    ctrlSock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    ctrlSock.connect((ip, port))
 
+    return ctrlSock
 
-proxy_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-proxy_socket.bind((PROXY_HOST, PROXY_PORT))
-proxy_socket.listen(2)
-print('Proxy Server started...')
-try:
+def runProxy():
+    # Create listening socket for clients
+    sClient = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sClient.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sClient.bind((PROXY_HOST, PROXY_PORT))
+
+    # Accept incoming connections
+    # TODO: Make async
     while True:
-        client_socket, address = proxy_socket.accept()
+        try:
+            sClient.listen(1)
 
-        # client has connected, create a socket object for destination server
-        dest_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        dest_socket.connect((FORWARD_HOST, FORWARD_PORT))
-        client_data = ""
-        print("client accepted")
-        while True:
-            # receive data from client
-            recieved = client_socket.recv(4096)
-            client_data += recieved.decode()
-            if not recieved:
-                break
-        # forward data to destination server
-        print("data recieved")
-        client_data = filterForbiden(client_data)
-        print(client_data)
-        dest_socket.sendall(client_data.encode())
+            clientConn, _ = sClient.accept()
+            print(C_BLUE + "="*10 + " NEW CONNECTION " + "="*10)
 
-        # receive data from destination server
-        dest_data = dest_socket.recv(4096)
-        if not dest_data:
+            # Create forwarding socket for server
+            sServer = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sServer.connect((FORWARD_HOST, FORWARD_PORT))
+
+            data = sServer.recv(BUFFER)
+            clientConn.send(data)
+
+            # Mediate conversation
+            while data := clientConn.recv(BUFFER):
+                print(data.decode(), end="")
+
+                sServer.send(data)
+                resp = sServer.recv(BUFFER)
+
+                if not resp:
+                    break
+
+                print(C_ORANGE + resp.decode() + C_RESET, end="")
+
+                clientConn.send(resp)
+
+        except KeyboardInterrupt:
+            print(C_RED + "Keyboard interrupt" + C_RESET)
+            clientConn.close()
+            sServer.close()
             break
-        # forward data to client
-        client_socket.sendall(dest_data)
 
-        # close the client connection
-        client_socket.close()
-        dest_socket.close()
+        finally:
+            clientConn.close()
+            sServer.close()
 
-except KeyboardInterrupt:
-    proxy_socket.close()
-    dest_socket.close()
-    client_socket.close()
+    sClient.close()
+
+if __name__ == "__main__":
+    runProxy()
