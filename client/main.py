@@ -25,8 +25,9 @@ def sendSMTP(message:str):
     sendData("Received: from bar.com by foo.com ; Thu, 21 May 1998 05:33:29 -0700 credit to the rfc for this one\r\n",client)
     sendData("\r\n",client)
     sendData(message,client)
+    sendData("\r\n",client)
     sendData(".\r\n",client)
-    client.sendall("quit\n".encode())
+    client.sendall("quit\r\n".encode())
     client.close()
 
 
