@@ -15,7 +15,7 @@ C_ORANGE = "\033[93m"
 C_RESET = "\033[0m"
 
 # Email data
-SENDER = "ඞ@localhost"
+SENDER = "amogus@localhost"
 RECIPIENT = "forgetful@localhost"
 SUBJECT = "Message totally not from the Illuminati"
 IN_FILE = "in.txt"
@@ -46,7 +46,7 @@ def sendEmail(verbose=False):
         if verbose:
             print(C_ORANGE + client.recv(1024).decode() + C_RESET, end="")
 
-        convo = [ "HELO ඞ\r\n" ]
+        convo = [ "HELO amogus\r\n" ]
 
         # Optional authentication
         if USERNAME != "" and PASSWORD != "":
