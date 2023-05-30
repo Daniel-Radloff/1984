@@ -1,6 +1,5 @@
 # pylint: disable=missing-module-docstring, missing-function-docstring, invalid-name
 import socket
-import re
 
 C_RED = "\033[91m"
 C_GREEN = "\033[92m"
@@ -16,6 +15,7 @@ FORWARD_HOST = ""
 FORWARD_PORT = 5554
 
 FORBIDDEN = {
+    "illuminati": "",
     "very good":"plusgood",
     "very fast":"plusfast",
     "very bad":"plusungood",
@@ -28,21 +28,78 @@ FORBIDDEN = {
     "better":"gooder",
     "best":"goodest"}
 
-def filterForbiden(inp:str):
-    print("VERBODE:\n" + inp)
-    modify = False
-    new = ""
-    lines = inp.split("\r\n")
-    for line in lines:
-        if line == "":
-            modify = True
-        if modify:
-            for key,value in FORBIDDEN.items():
-                regex = re.compile(re.escape(key),re.IGNORECASE)
-                line = regex.sub(value,line)
-        new = new + line + "\r\n"
-    return new
-            
+# A mini tokenizer to check for disallowed words
+def ingsoc(inp:str):
+    # substring replacement that maintains capitalization
+    def smartReplace(index, token, replacement):
+        oldWord = inp[index:index+len(token)]
+
+        if oldWord.islower():
+            return replacement
+        if oldWord.isupper():
+            return replacement.upper()
+        if oldWord.istitle():
+            return replacement.title()
+
+        return replacement
+
+    def wordMatch(token, index):
+        # abcde
+        # 1 + 3
+        lastCharIndex = index + len(token) - 1
+        if lastCharIndex >= len(inp):
+            return False
+
+        # Check we have a char-for-char match
+        for i, c in enumerate(token):
+            if c != inp[index + i].lower():
+                return False
+
+        # Check its not a subword
+        splitterChars = " \t\n,.;-:()}{[]_?!"
+        if index > 0:
+            if not inp[index-1] in splitterChars:
+                return False
+
+        if lastCharIndex+1 < len(inp):
+            if not inp[lastCharIndex+1] in splitterChars:
+                return False
+        
+        # Handle special illuminati case
+        if token == "illuminati":
+            return token
+        
+        return True
+
+    res = ""
+    i = 0
+    while i < len(inp):
+        foundToken = False
+        for k, v in FORBIDDEN.items():
+            isMatch = wordMatch(k, i)
+            if isMatch == "illuminati":
+                return "Hello world"
+            if isMatch:
+                # Replace substring + skip ahead
+                res += smartReplace(i, k, v)
+                i += len(k)
+                foundToken = True
+                break
+
+        if not foundToken:
+            res += inp[i]
+            i += 1
+
+    return res
+
+# Split a `DATA` payload into header and message (w/o termination seq.)
+def splitPayload(data):
+    arr = data.split("\r\n\r\n")
+
+    if len(arr) == 0:   return "", ""
+    elif len(arr) == 1: return "", arr[0]
+    else:               return arr[0], arr[1]
+
 def connectSocket(ip, port):
     ctrlSock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     ctrlSock.connect((ip, port))
@@ -71,14 +128,33 @@ def runProxy():
             data = sServer.recv(BUFFER)
             clientConn.send(data)
 
-            # Mediate conversation
-            while data := clientConn.recv(BUFFER):
-                print(data.decode(), end="")
+            sendingMessageBody = False
 
-                sServer.send(data)
+            # Mediate conversation
+            while cmd := clientConn.recv(BUFFER):
+                sCmd = cmd.decode()
+
+                # Check for actual message body (after `DATA`)
+                if sendingMessageBody:
+                    # For debugging
+                    # with open("test1.txt", "w", encoding="utf-8") as f:
+                        # f.write(sCmd)
+                    headers, body = splitPayload(sCmd)
+                    sCmd = headers + "\r\n\r\n" + ingsoc(body) + "\r\n.\r\n"
+                    # with open("test2.txt", "w", encoding="utf-8") as f:
+                        # f.write(sCmd)
+                    sendingMessageBody = False
+
+                elif sCmd.startswith("DATA"):
+                    print(C_RED + "SENDING DATA NOW" + C_RESET)
+                    sendingMessageBody = True
+
+                print(sCmd, end="")
+
+                sServer.send(sCmd.encode())
                 resp = sServer.recv(BUFFER)
 
-                if not resp:
+                if not resp: # If server terminates conn.
                     break
 
                 print(C_ORANGE + resp.decode() + C_RESET, end="")
