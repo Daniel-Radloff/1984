@@ -14,6 +14,7 @@ BUFFER = 1024
 FORWARD_HOST = ""
 FORWARD_PORT = 5554
 
+# All tokens are equal, but some are more equal than others if they're declared earlier
 FORBIDDEN = {
     "illuminati": "",
     "very good":"plusgood",
@@ -26,7 +27,10 @@ FORBIDDEN = {
     "ran":"runned",
     "stole":"stealed",
     "better":"gooder",
-    "best":"goodest"}
+    "best":"goodest"
+}
+
+DISCLAIMER = "\r\n\r\nPlease do not take anything in this email seriously!"
 
 # A mini tokenizer to check for disallowed words
 def ingsoc(inp:str):
@@ -94,11 +98,13 @@ def ingsoc(inp:str):
 
 # Split a `DATA` payload into header and message (w/o termination seq.)
 def splitPayload(data):
+    # TODO: We might wanna check for tags like `From:`, `To:`, `Subject:`
+    #       at the beginning of lines to more accurately delineate headers/body
     arr = data.split("\r\n\r\n")
 
     if len(arr) == 0:   return "", ""
-    elif len(arr) == 1: return "", arr[0]
-    else:               return arr[0], arr[1]
+    elif len(arr) == 1: return "", "\r\n\r\n".join(arr[0:-1])
+    else:               return arr[0], "\r\n\r\n".join(arr[1:-1])
 
 def connectSocket(ip, port):
     ctrlSock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -137,12 +143,12 @@ def runProxy():
                 # Check for actual message body (after `DATA`)
                 if sendingMessageBody:
                     # For debugging
-                    # with open("test1.txt", "w", encoding="utf-8") as f:
-                        # f.write(sCmd)
+                    with open("test1.txt", "w", encoding="utf-8") as f:
+                        f.write(sCmd)
                     headers, body = splitPayload(sCmd)
-                    sCmd = headers + "\r\n\r\n" + ingsoc(body) + "\r\n.\r\n"
-                    # with open("test2.txt", "w", encoding="utf-8") as f:
-                        # f.write(sCmd)
+                    sCmd = headers + "\r\n\r\n" + ingsoc(body) + DISCLAIMER + "\r\n.\r\n"
+                    with open("test2.txt", "w", encoding="utf-8") as f:
+                        f.write(sCmd)
                     sendingMessageBody = False
 
                 elif sCmd.startswith("DATA"):

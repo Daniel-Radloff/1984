@@ -3,6 +3,7 @@
 import socket
 import base64
 import os
+from json import loads
 
 HOST = "localhost"
 PORT = 5555
@@ -17,8 +18,7 @@ C_RESET = "\033[0m"
 # Email data
 SENDER = "amogus@localhost"
 RECIPIENT = "forgetful@localhost"
-SUBJECT = "Message totally not from the Illuminati"
-IN_FILE = "in.txt"
+IN_FILE = "in.json"
 
 # Optional authentication
 USERNAME = base64.b64encode(SENDER.encode()).decode()
@@ -31,12 +31,13 @@ def readInFile():
         print(f"{C_RED}{IN_FILE} not found{C_RESET}")
 
     with open(IN_FILE, "r", encoding="utf-8") as f:
-        return f.read()
+        msg = loads(f.read())
+        return msg["subject"], msg["body"]
 
 def sendEmail(verbose=False):
-    body = readInFile()
+    subject, body = readInFile()
 
-    msg = f"From: {SENDER}\r\nTo: {RECIPIENT}\r\nSubject: {SUBJECT}\r\n\r\n{body}\r\n"
+    msg = f"From: {SENDER}\r\nTo: {RECIPIENT}\r\nSubject: {subject}\r\n\r\n{body}\r\n"
 
     endmsg = "\r\n.\r\n"
 
