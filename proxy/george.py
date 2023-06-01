@@ -1,4 +1,4 @@
-# pylint: disable=missing-module-docstring, missing-function-docstring, invalid-name
+# pylint: disable=missing-docstring, invalid-name
 import socket
 import sys
 from datetime import datetime
@@ -36,6 +36,12 @@ FORBIDDEN = {
 }
 
 DISCLAIMER = "\r\n\r\nPlease do not take anything in this email seriously!"
+
+def logEvent(eventType: str, details: str):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    eventLabel = eventType + " "*max(0, 9-len(eventType))
+    with open("log", "a", encoding="utf-8") as f:
+        f.write(f"[{timestamp}] {eventLabel.upper()} | {details}\n")
 
 # A mini tokenizer to check for disallowed words
 def ingsoc(inp:str,addr:str):
@@ -109,12 +115,15 @@ def ingsoc(inp:str,addr:str):
         return "Glory to elpepegalinio"
 
 def ban(ip:str):
-    BLACKLIST["ip"].append({
-        "value": ip,
-        "expiryTime": -1
-    })
-    with open('blacklist', 'a') as list:
-        list.write("\r\n" + ip +  " " + "-1")
+    if not checkBlacklist(ip, "ip"):
+        BLACKLIST["ip"].append({
+            "value": ip.strip().lower(),
+            "expiryTime": -1
+        })
+        logEvent("ban", ip)
+        with open('blacklist', 'a', encoding="utf-8") as fbl:
+            fbl.write("\r\n" + ip +  " " + "-1")
+
 # Split a `DATA` payload into header and message (w/o termination seq.)
 def splitPayload(data):
     # TODO: We might wanna check for tags like `From:`, `To:`, `Subject:`
@@ -149,9 +158,11 @@ def runProxy():
             clientConn, addr = sClient.accept()
             # Check blacklist
             print("ADDRESS:", addr)
+            logEvent("connect", addr[0])
+
             if checkBlacklist(addr[0], "ip"):
                 clientConn.close()
-                raise Exception("IP [" + addr[0] + "] blacklisted")
+                raise BlackListedException(addr[0])
 
             print(C_BLUE + "="*10 + " NEW CONNECTION " + "="*10)
 
@@ -201,7 +212,12 @@ def runProxy():
             if "sServer" in locals():     sServer.close()
             break
 
+        except BlackListedException as e:
+            logEvent("blocked", str(e))
+            print(C_RED + "Blocked: " + str(e) + C_RESET)
+
         except Exception as e:
+            logEvent("error", str(e))
             print(C_RED + "Exception: " + str(e) + C_RESET)
 
         finally:
@@ -213,7 +229,7 @@ def runProxy():
 # Returns true if the specified value is blacklisted
 def checkBlacklist(value, valType):
     for v in BLACKLIST[valType]:
-        if value.lower() == v["value"]:
+        if value.strip().lower() == v["value"]:
             if v["expiryTime"] == -1 or v["expiryTime"] > datetime.now().timestamp():
                 return True
     return False
@@ -223,6 +239,7 @@ def loadBlacklist():
     with open("blacklist", "r", encoding="utf-8") as f:
         for line in f:
             row = line.split()
+            if len(row) < 1: continue
             value = row[0].strip()
             expiryTime = -1 # never expires
             try: expiryTime = int(row[1].strip())
@@ -238,6 +255,10 @@ def loadBlacklist():
                     "value": value.replace(":", ".").split("/")[0],
                     "expiryTime": expiryTime
                 })
+
+class BlackListedException(Exception):
+    def __init__(self, address):
+        super().__init__("IP [" + address + "] blacklisted")
 
 if __name__ == "__main__":
     loadBlacklist()
