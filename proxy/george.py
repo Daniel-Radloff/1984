@@ -18,6 +18,7 @@ FORWARD_HOST = ""
 FORWARD_PORT = 5554
 
 BLACKLIST = { "email": [], "ip": [] }
+MAX_ALLOWED_FORBIDDEN = 8
 
 # All tokens are equal, but some are more equal than others if they're declared earlier
 FORBIDDEN = {
@@ -79,11 +80,11 @@ def ingsoc(inp:str,addr:str):
         if lastCharIndex+1 < len(inp):
             if not inp[lastCharIndex+1] in splitterChars:
                 return False
-        
+
         # Handle special illuminati case
         if token == "illuminati":
             return token
-        
+
         return True
 
     res = ""
@@ -108,11 +109,12 @@ def ingsoc(inp:str,addr:str):
         if not foundToken:
             res += inp[i]
             i += 1
-    if (banHammer < 8):
-        return res
-    else:
+
+    if banHammer >= MAX_ALLOWED_FORBIDDEN:
         ban(addr)
-        return "Glory to elpepegalinio"
+        return None # We have banned them, block the message
+    
+    return res
 
 def ban(ip:str):
     if not checkBlacklist(ip, "ip"):
@@ -185,7 +187,11 @@ def runProxy():
                     with open("test1.txt", "w", encoding="utf-8") as f:
                         f.write(sCmd)
                     headers, body = splitPayload(sCmd)
-                    sCmd = headers + "\r\n\r\n" + ingsoc(body,addr[0]) + DISCLAIMER + "\r\n.\r\n"
+                    filteredBody = ingsoc(body,addr[0])
+                    if filteredBody is None:
+                        raise BlackListedException(addr[0])
+
+                    sCmd = headers + "\r\n\r\n" + filteredBody + DISCLAIMER + "\r\n.\r\n"
                     with open("test2.txt", "w", encoding="utf-8") as f:
                         f.write(sCmd)
                     sendingMessageBody = False
