@@ -1,5 +1,7 @@
 # pylint: disable=missing-module-docstring, missing-function-docstring, invalid-name
 import socket
+from datetime import datetime
+import re
 
 C_RED = "\033[91m"
 C_GREEN = "\033[92m"
@@ -13,6 +15,8 @@ BUFFER = 1024
 
 FORWARD_HOST = ""
 FORWARD_PORT = 5554
+
+BLACKLIST = { "email": [], "ip": [] }
 
 # All tokens are equal, but some are more equal than others if they're declared earlier
 FORBIDDEN = {
@@ -106,6 +110,9 @@ def splitPayload(data):
     elif len(arr) == 1: return "", "\r\n\r\n".join(arr[0:-1])
     else:               return arr[0], "\r\n\r\n".join(arr[1:-1])
 
+def splitHeaders(headers):
+    return [h.split(":") for h in headers.split("\r\n")]
+
 def connectSocket(ip, port):
     ctrlSock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     ctrlSock.connect((ip, port))
@@ -124,7 +131,13 @@ def runProxy():
         try:
             sClient.listen(1)
 
-            clientConn, _ = sClient.accept()
+            clientConn, addr = sClient.accept()
+            # Check blacklist
+            print("ADDRESS:", addr)
+            if checkBlacklist(addr[0], "ip"):
+                clientConn.close()
+                raise Exception("IP [" + addr[0] + "] blacklisted")
+
             print(C_BLUE + "="*10 + " NEW CONNECTION " + "="*10)
 
             # Create forwarding socket for server
@@ -169,15 +182,48 @@ def runProxy():
 
         except KeyboardInterrupt:
             print(C_RED + "Keyboard interrupt" + C_RESET)
-            clientConn.close()
-            sServer.close()
+            if "clientConn" in locals():  clientConn.close()
+            if "sServer" in locals():     sServer.close()
             break
 
+        except Exception as e:
+            print(C_RED + "Exception: " + str(e) + C_RESET)
+
         finally:
-            clientConn.close()
-            sServer.close()
+            if "clientConn" in locals():  clientConn.close()
+            if "sServer" in locals():     sServer.close()
 
     sClient.close()
 
+# Returns true if the specified value is blacklisted
+def checkBlacklist(value, valType):
+    for v in BLACKLIST[valType]:
+        if value.lower() == v["value"]:
+            if v["expiryTime"] == -1 or v["expiryTime"] > datetime.now().timestamp():
+                return True
+    return False
+
+def loadBlacklist():
+    # Read blacklist
+    with open("blacklist", "r", encoding="utf-8") as f:
+        for line in f:
+            row = line.split()
+            value = row[0].strip()
+            expiryTime = -1 # never expires
+            try: expiryTime = int(row[1].strip())
+            except: expiryTime = -1
+
+            if re.match(r"^\S+@\S+\.\w+$", value):
+                BLACKLIST["email"].append({
+                    "value": value.lower(),
+                    "expiryTime": expiryTime
+                })
+            elif re.match(r"^(\d{1,3}[:.]){3}\d{1,3}(\/\d\d?)?$", value):
+                BLACKLIST["ip"].append({
+                    "value": value.replace(":", ".").split("/")[0],
+                    "expiryTime": expiryTime
+                })
+
 if __name__ == "__main__":
+    loadBlacklist()
     runProxy()
