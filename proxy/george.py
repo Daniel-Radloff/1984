@@ -1,5 +1,6 @@
 # pylint: disable=missing-module-docstring, missing-function-docstring, invalid-name
 import socket
+import sys
 from datetime import datetime
 import re
 
@@ -37,7 +38,7 @@ FORBIDDEN = {
 DISCLAIMER = "\r\n\r\nPlease do not take anything in this email seriously!"
 
 # A mini tokenizer to check for disallowed words
-def ingsoc(inp:str):
+def ingsoc(inp:str,addr:str):
     # substring replacement that maintains capitalization
     def smartReplace(index, token, replacement):
         oldWord = inp[index:index+len(token)]
@@ -81,13 +82,17 @@ def ingsoc(inp:str):
 
     res = ""
     i = 0
+    banHammer = 0
+
     while i < len(inp):
         foundToken = False
         for k, v in FORBIDDEN.items():
             isMatch = wordMatch(k, i)
             if isMatch == "illuminati":
+                banHammer = sys.maxsize
                 return "Hello world"
             if isMatch:
+                banHammer += 1
                 # Replace substring + skip ahead
                 res += smartReplace(i, k, v)
                 i += len(k)
@@ -97,9 +102,19 @@ def ingsoc(inp:str):
         if not foundToken:
             res += inp[i]
             i += 1
+    if (banHammer < 8):
+        return res
+    else:
+        ban(addr)
+        return "Glory to elpepegalinio"
 
-    return res
-
+def ban(ip:str):
+    BLACKLIST["ip"].append({
+        "value": ip,
+        "expiryTime": -1
+    })
+    with open('blacklist', 'a') as list:
+        list.write("\r\n" + ip +  " " + "-1")
 # Split a `DATA` payload into header and message (w/o termination seq.)
 def splitPayload(data):
     # TODO: We might wanna check for tags like `From:`, `To:`, `Subject:`
@@ -159,7 +174,7 @@ def runProxy():
                     with open("test1.txt", "w", encoding="utf-8") as f:
                         f.write(sCmd)
                     headers, body = splitPayload(sCmd)
-                    sCmd = headers + "\r\n\r\n" + ingsoc(body) + DISCLAIMER + "\r\n.\r\n"
+                    sCmd = headers + "\r\n\r\n" + ingsoc(body,addr[0]) + DISCLAIMER + "\r\n.\r\n"
                     with open("test2.txt", "w", encoding="utf-8") as f:
                         f.write(sCmd)
                     sendingMessageBody = False
