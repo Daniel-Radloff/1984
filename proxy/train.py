@@ -40,5 +40,5 @@ model.fit(X_train, Y_train)
 print(C_ORANGE + "Saving Model..." + C_RESET)
 joblib.dump(model, "spamDet.joblib")
 
-# Save model
-print(C_GREEN + "Test prediction accuracy: " + str(model.score(X_test, Y_test) + C_RESET))
+score = model.score(X_test, Y_test)
+print("Test prediction accuracy: " + C_GREEN + str(score) + C_RESET)
