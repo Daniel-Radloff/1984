@@ -1,4 +1,5 @@
 # pylint: disable=missing-docstring, invalid-name
+import joblib
 import socket
 import sys
 from datetime import datetime
@@ -19,6 +20,8 @@ FORWARD_PORT = 5554
 
 BLACKLIST = { "email": [], "ip": [] }
 MAX_ALLOWED_FORBIDDEN = 8
+
+spamPredictor = joblib.load("spamDet.joblib")
 
 # All tokens are equal, but some are more equal than others if they're declared earlier
 FORBIDDEN = {
@@ -43,6 +46,9 @@ def logEvent(eventType: str, details: str):
     eventLabel = eventType + " "*max(0, 9-len(eventType))
     with open("log", "a", encoding="utf-8") as f:
         f.write(f"[{timestamp}] {eventLabel.upper()} | {details}\n")
+
+def checkSpam(message: str):
+    return bool(spamPredictor.predict([message])[0])
 
 # A mini tokenizer to check for disallowed words
 def ingsoc(inp:str,addr:str):
@@ -128,8 +134,6 @@ def ban(ip:str):
 
 # Split a `DATA` payload into header and message (w/o termination seq.)
 def splitPayload(data):
-    # TODO: We might wanna check for tags like `From:`, `To:`, `Subject:`
-    #       at the beginning of lines to more accurately delineate headers/body
     arr = data.split("\r\n\r\n")
 
     if len(arr) == 0:   return "", ""
@@ -137,7 +141,17 @@ def splitPayload(data):
     else:               return arr[0], "\r\n\r\n".join(arr[1:-1])
 
 def splitHeaders(headers):
-    return [h.split(":") for h in headers.split("\r\n")]
+    headerData = [h.split(":") for h in headers.split("\r\n")]
+    if len(headerData) == 0: return {}
+
+    headerData = [(h[0].strip(), ":".join(h[1:])) for h in headerData]
+    return { k: v.strip() for (k, v) in headerData }
+
+def joinHeaders(headerData):
+    headers = []
+    for k in headerData:
+        headers.append(k + ": " + headerData[k])
+    return "\r\n".join(headers)
 
 def connectSocket(ip, port):
     ctrlSock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -187,11 +201,17 @@ def runProxy():
                     with open("test1.txt", "w", encoding="utf-8") as f:
                         f.write(sCmd)
                     headers, body = splitPayload(sCmd)
+                    headerData = splitHeaders(headers)
+
+                    if checkSpam(body):
+                        if "Subject" not in headerData: headerData["Subject"] = ""
+                        headerData["Subject"] = "🚩 SPAM! " + headerData["Subject"]
+
                     filteredBody = ingsoc(body,addr[0])
                     if filteredBody is None:
                         raise BlackListedException(addr[0])
 
-                    sCmd = headers + "\r\n\r\n" + filteredBody + DISCLAIMER + "\r\n.\r\n"
+                    sCmd = joinHeaders(headerData) + "\r\n\r\n" + filteredBody + DISCLAIMER + "\r\n.\r\n"
                     with open("test2.txt", "w", encoding="utf-8") as f:
                         f.write(sCmd)
                     sendingMessageBody = False
