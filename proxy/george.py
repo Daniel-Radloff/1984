@@ -204,7 +204,10 @@ def runProxy():
                     headerData = splitHeaders(headers)
 
                     if checkSpam(body):
-                        if "Subject" not in headerData: headerData["Subject"] = ""
+                        if "Subject" not in headerData:
+                            headerData["Subject"] = ""
+                            logEvent("spam", addr[0])
+                        else: logEvent("spam", addr[0] + " | " + headerData["Subject"])
                         headerData["Subject"] = "🚩 SPAM! " + headerData["Subject"]
 
                     filteredBody = ingsoc(body,addr[0])
